@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Attach Bounding Box to Phone Camera with JavaScript</title>
+    <style>
+        video {
+            width: 250px;
+            height: 250px;
+            display: none;
+        }
+
+        .title {
+            width: 100%;
+            display: block;
+            text-align: center;
+            position: fixed;
+            z-index: 1;
+        }
+
+        #canvas-wrapper {
+            position: relative;
+        }
+
+        canvas {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+        }
+
+
+        #capture-button {
+            position: fixed;
+            bottom: 10%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0px 3px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        #capture-button:before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 25px;
+            height: 25px;
+            background-color: #000;
+            border-radius: 50%;
+        }
+
+        #capture-button:after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background-color: #fff;
+            border-radius: 50%;
+        }
+
+        #photo {
+            width: 100%;
+            height: auto;
+            margin: 20px 0;
+        }
+
+        .captured-photo {
+            text-align: center;
+        }
+
+        .result {
+            display: flex;
+            overflow: scroll;
+            width: 100px;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+    <div class="title">
+        <div id="result"></div>
+    </div>
+
+    <video id="video"></video>
+    <div id="canvas-wrapper">
+        <canvas id="canvas"></canvas>
+        <div class="box" id="box"></div>
+    </div>
+    <div class="capture-button">
+        <button id="capture-button"></button>
+    </div>
+    <div class="captured-photo">
+        <img id="photo" src="">
+    </div>
+    <script>
+        // Get the video element and canvas element
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const box = document.getElementById('box');
+        const captureButton = document.getElementById('capture-button');
+        const photo = document.getElementById('photo');
+        const result = document.getElementById('result');
+        // Access the phone's camera and stream the video
+        navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const videoSources = [];
+                devices.forEach(device => {
+                    if (device.kind === 'videoinput') {
+                        videoSources.push(device);
+                    }
+                });
+                let constraints;
+                videoSources.forEach(source => {
+                    if (source.label.includes('back')) {
+                        constraints = { video: { deviceId: source.deviceId } };
+                    }
+                });
+                if (!constraints && videoSources.length > 0) {
+                    constraints = { video: { deviceId: videoSources[0].deviceId } };
+                }
+                if (constraints) {
+                    return navigator.mediaDevices.getUserMedia(constraints);
+                }
+                else {
+                    throw new Error('No video sources found');
+                }
+            })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+            })
+            .catch(error => {
+                console.error(error);
+            });
+
+
+        // Draw the video stream onto the canvas
+        video.addEventListener('play', function () {
+            setInterval(function () {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Get the position and size of the object to track
+                const objectWidth = 200; //yatay uzunluk alanı
+                const objectHeight = 50; // dikey uzunluk 
+                // Calculate the center of the canvas
+                const canvasCenterX = canvas.width / 2;
+                const canvasCenterY = canvas.height / 2;
+
+                // Calculate the position of the box based on the canvas center and box size
+                const boxWidth = objectWidth / video.videoWidth * canvas.width;
+                const boxHeight = objectHeight / video.videoHeight * canvas.height;
+                const boxX = canvasCenterX - boxWidth / 2;
+                const boxY = canvasCenterY - boxHeight / 2;
+
+                // Draw the box on top of the canvas
+                drawBox(boxX, boxY, boxWidth, boxHeight);
+            }, 33);
+        });
+
+        function drawBox(x, y, width, height) {
+            box.style.width = `${width}px`;
+            box.style.height = `${height}px`;
+            box.style.top = `${y}px`;
+            box.style.left = `${x}px`;
+
+            // Fill the outer part of the box with white
+            ctx.fillStyle = 'rgba(255, 255, 256, 0.9)';
+            ctx.fillRect(0, 0, x, canvas.height);
+            ctx.fillRect(x, 0, canvas.width - x, y);
+            ctx.fillRect(x + width, y, canvas.width - (x + width), canvas.height - y);
+            ctx.fillRect(x, y + height, width, canvas.height - (y + height));
+        }
+
+
+
+        // Capture the photo when the button is clicked
+        captureButton.addEventListener('click', function () {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/png');
+            const boxX = parseInt(box.style.left);
+            const boxY = parseInt(box.style.top);
+            const boxWidth = parseInt(box.style.width);
+            const boxHeight = parseInt(box.style.height);
+            const croppedCanvas = document.createElement('canvas');
+            const croppedCtx = croppedCanvas.getContext('2d');
+            croppedCanvas.width = boxWidth;
+            croppedCanvas.height = boxHeight;
+            croppedCtx.drawImage(canvas, boxX, boxY, boxWidth, boxHeight, 0, 0, boxWidth, boxHeight);
+            const croppedDataUrl = croppedCanvas.toDataURL('image/png');
+            photo.src = croppedDataUrl;
+            $.ajax({
+                url: 'https://api.ocr.space/parse/image',
+                method: 'POST',
+                data: {
+                    apikey: '{api_key}',
+                    base64Image: photo.src,
+                    filetype: 'png',
+                    isOverlayRequired: true
+                },
+                dataType: 'json'
+            }).done(function (data) {
+                result.innerHTML = data.ParsedResults[0].ParsedText
+                console.log(data.ParsedResults[0].ParsedText)
+            }).fail(function (jqXHR, textStatus, errorThrown) {
+                console.log(textStatus, errorThrown);
+            });
+        });
+
+    </script>
+</body>
+
+</html>
